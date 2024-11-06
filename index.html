@@ -11,7 +11,7 @@
         left: 0;
         width: 100vw;
         height: 100vh;
-        object-fit: contain; /* 高さに依存して拡大縮小 */
+        object-fit: contain;
         z-index: 999;
       }
       .video-container {
@@ -68,6 +68,7 @@
         <label for="camera-check" class="text-lg">カメラ使用</label>
         <input type="checkbox" id="camera-check" checked />
       </div>
+      <div id="error-message" class="text-center text-red-500"></div>
       <div class="mx-10 border-t-2 border-t-grey-300"></div>
       <!-- SDP関係 -->
       <div class="grid grid-cols-2 gap-2">
@@ -128,21 +129,30 @@
 
       // カメラ使用チェックボックス
       const cameraCheck = document.getElementById("camera-check");
+      const errorMessage = document.getElementById("error-message");
 
       // WebRTCのコネクションオブジェクトを作成
       const peer = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
 
       // 自身のビデオストリームを取得
       async function startVideo() {
-        if (cameraCheck.checked) {
-          const myMediaStream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              width: 800,
-              height: 600,
-            },
-          });
-          myVideo.srcObject = myMediaStream;
-          myMediaStream.getTracks().forEach((track) => peer.addTrack(track, myMediaStream));
+        try {
+          if (cameraCheck.checked) {
+            const myMediaStream = await navigator.mediaDevices.getUserMedia({
+              video: {
+                width: 800,
+                height: 600,
+              },
+            });
+            myVideo.srcObject = myMediaStream;
+            myMediaStream.getTracks().forEach((track) => peer.addTrack(track, myMediaStream));
+          }
+        } catch (error) {
+          if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
+            errorMessage.textContent = "カメラが見つかりません。カメラが接続されているか確認してください。";
+          } else {
+            errorMessage.textContent = `エラーが発生しました: ${error.message}`;
+          }
         }
       }
 
