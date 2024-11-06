@@ -63,6 +63,12 @@
         </div>
       </div>
       <div class="mx-10 border-t-2 border-t-grey-300"></div>
+      <!-- カメラの有無チェック -->
+      <div class="flex justify-center gap-4">
+        <label for="camera-check" class="text-lg">カメラ使用</label>
+        <input type="checkbox" id="camera-check" checked />
+      </div>
+      <div class="mx-10 border-t-2 border-t-grey-300"></div>
       <!-- SDP関係 -->
       <div class="grid grid-cols-2 gap-2">
         <label class="flex flex-col items-center gap-2">
@@ -120,37 +126,92 @@
       const myVideoFullscreenButton = document.getElementById("my-video-fullscreen");
       const otherVideoFullscreenButton = document.getElementById("other-video-fullscreen");
 
-      // フルスクリーン表示を切り替える関数
+      // カメラ使用チェックボックス
+      const cameraCheck = document.getElementById("camera-check");
+
+      // WebRTCのコネクションオブジェクトを作成
+      const peer = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+
+      // 自身のビデオストリームを取得
+      async function startVideo() {
+        if (cameraCheck.checked) {
+          const myMediaStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: 800,
+              height: 600,
+            },
+          });
+          myVideo.srcObject = myMediaStream;
+          myMediaStream.getTracks().forEach((track) => peer.addTrack(track, myMediaStream));
+        }
+      }
+
+      // ページ読み込み時にビデオを開始
+      startVideo();
+
+      // Offer SDPの作成処理
+      document.getElementById("sdp-create-offer-button").addEventListener("click", async () => {
+        const sessionDescription = await peer.createOffer();
+        await peer.setLocalDescription(sessionDescription);
+        document.getElementById("sdp-output").value = JSON.stringify(sessionDescription, null, 2);
+      });
+
+      // SDPの受け取り処理
+      document.getElementById("sdp-receive-button").addEventListener("click", async () => {
+        const sessionDescription = JSON.parse(document.getElementById("sdp-input").value);
+        await peer.setRemoteDescription(sessionDescription);
+
+        if (sessionDescription.type === "offer") {
+          const sessionDescription = await peer.createAnswer();
+          await peer.setLocalDescription(sessionDescription);
+          document.getElementById("sdp-output").value = JSON.stringify(sessionDescription, null, 2);
+        }
+      });
+
+      // ICE Candidateの処理
+      peer.addEventListener("icecandidate", (event) => {
+        if (event.candidate === null) return;
+        const iceCandidates = JSON.parse(document.getElementById("ice-output").value || "[]");
+        iceCandidates.push(event.candidate);
+        document.getElementById("ice-output").value = JSON.stringify(iceCandidates, null, 2);
+      });
+
+      document.getElementById("ice-receive-button").addEventListener("click", async () => {
+        const iceCandidates = JSON.parse(document.getElementById("ice-input").value);
+        for (const iceCandidate of iceCandidates) {
+          await peer.addIceCandidate(iceCandidate);
+        }
+      });
+
+      // Trackを取得した時の処理
+      peer.addEventListener("track", (event) => {
+        otherVideo.srcObject = event.streams[0];
+      });
+
+      // 画面いっぱいにする機能
       function toggleFullscreen(videoElement, videoContainer, button) {
         const isFullscreen = videoElement.classList.contains("fullscreen");
 
         if (isFullscreen) {
-          // フルスクリーン解除
           videoElement.classList.remove("fullscreen");
-          videoContainer.style.position = ""; // 元の位置に戻す
-          button.textContent = "画面いっぱいにする"; // ボタンのテキスト変更
-          document.getElementById("fullscreen-container").remove(); // フルスクリーンモードの背景削除
+          videoContainer.style.position = "";
+          button.textContent = "画面いっぱいにする";
+          document.getElementById("fullscreen-container").remove();
         } else {
-          // フルスクリーン表示
           videoElement.classList.add("fullscreen");
-          videoContainer.style.position = "relative"; // 相対位置を設定
-          button.textContent = "元に戻す"; // ボタンのテキスト変更
-
-          // フルスクリーン用の背景を作成
+          videoContainer.style.position = "relative";
+          button.textContent = "元に戻す";
           const fullscreenContainer = document.createElement("div");
           fullscreenContainer.id = "fullscreen-container";
           fullscreenContainer.classList.add("fullscreen-container");
           fullscreenContainer.innerHTML = `<button id="fullscreen-close" class="fullscreen-close">戻る</button>`;
           document.body.appendChild(fullscreenContainer);
-
-          // 戻るボタンのイベントリスナー
           document.getElementById("fullscreen-close").addEventListener("click", () => {
             toggleFullscreen(videoElement, videoContainer, button);
           });
         }
       }
 
-      // ボタンにイベントを追加
       myVideoFullscreenButton.addEventListener("click", () => {
         toggleFullscreen(myVideo, myVideoContainer, myVideoFullscreenButton);
       });
